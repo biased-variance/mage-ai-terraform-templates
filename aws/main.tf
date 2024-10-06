@@ -183,3 +183,104 @@ resource "aws_security_group" "service_security_group" {
     Environment = var.app_environment
   }
 }
+
+locals {
+  lb_name = split("/", aws_lb_listener.listener.arn)[2]
+}
+
+data "aws_lb" "existing" {
+  name = local.lb_name
+}
+
+resource "aws_cognito_user_pool" "pool" {
+  name = "${var.app_name}-${var.app_environment}-user-pool"
+  
+  password_policy {
+    minimum_length    = 8
+    require_lowercase = true
+    require_numbers   = true
+    require_symbols   = true
+    require_uppercase = true
+  }
+}
+
+resource "aws_cognito_user_pool_client" "client" {
+  name         = "${var.app_name}-${var.app_environment}-client"
+  user_pool_id = aws_cognito_user_pool.pool.id
+
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows  = ["code"]
+  allowed_oauth_scopes = ["openid", "email", "profile"]
+  
+  callback_urls = ["https://${data.aws_lb.existing.dns_name}/oauth2/idpresponse", "https://mageai.biasedvariance.com/oauth2/idpresponse"]
+  logout_urls   = ["https://${data.aws_lb.existing.dns_name}", "https://mageai.biasedvariance.com"]
+  supported_identity_providers = ["COGNITO"]
+
+  generate_secret = true
+
+  prevent_user_existence_errors = "ENABLED"
+  explicit_auth_flows = [
+    "ALLOW_REFRESH_TOKEN_AUTH",
+    "ALLOW_USER_SRP_AUTH"
+  ]
+}
+
+resource "aws_cognito_user_pool_domain" "main" {
+  domain       = "${var.app_name}-${var.app_environment}-auth-${random_id.suffix.hex}"
+  user_pool_id = aws_cognito_user_pool.pool.id
+}
+
+resource "random_id" "suffix" {
+  byte_length = 8
+}
+
+resource "aws_lb_listener" "front_end_https" {
+  load_balancer_arn = data.aws_lb.existing.arn
+  port              = "443"
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08"
+  certificate_arn   = var.acm_certificate_arn
+
+  default_action {
+    type = "authenticate-cognito"
+    authenticate_cognito {
+      user_pool_arn       = aws_cognito_user_pool.pool.arn
+      user_pool_client_id = aws_cognito_user_pool_client.client.id
+      user_pool_domain    = "${aws_cognito_user_pool_domain.main.domain}.auth.${var.aws_region}.amazoncognito.com"
+      on_unauthenticated_request = "authenticate"
+      scope                      = "openid"
+      session_cookie_name        = "AWSELBAuthSessionCookie"
+      session_timeout            = 3600
+    }
+  }
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.target_group.arn
+  }
+}
+
+output "cognito_user_pool_id" {
+  value = aws_cognito_user_pool.pool.id
+}
+
+output "cognito_app_client_id" {
+  value = aws_cognito_user_pool_client.client.id
+}
+
+output "cognito_domain" {
+  value = "https://${aws_cognito_user_pool_domain.main.domain}.auth.${var.aws_region}.amazoncognito.com"
+}
+
+output "alb_dns_name" {
+  value = data.aws_lb.existing.dns_name
+}
+
+resource "aws_security_group_rule" "allow_https" {
+  type        = "ingress"
+  from_port   = 443
+  to_port     = 443
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"]  # Be more restrictive if possible
+  security_group_id = aws_security_group.load_balancer_security_group.id
+}

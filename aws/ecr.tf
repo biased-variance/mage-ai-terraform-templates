@@ -11,7 +11,7 @@ resource "aws_ecr_repository" "container_repository" {
     Environment = var.app_environment
   }
 
-  lifecycle {
-    prevent_destroy = true
-  }
+  # lifecycle {
+  #  prevent_destroy = true
+  # }
 }

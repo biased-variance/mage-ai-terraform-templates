@@ -21,7 +21,7 @@ variable "app_count" {
 variable "aws_region" {
   type        = string
   description = "AWS Region"
-  default     = "us-west-2"
+  default     = "us-east-2"
 }
 
 variable "aws_cloudwatch_retention_in_days" {
@@ -87,11 +87,53 @@ variable "private_subnets" {
 
 variable "availability_zones" {
   description = "List of availability zones"
-  default     = ["us-west-2a", "us-west-2b"]
+  default     = ["us-east-2a", "us-east-2b"]
 }
 
 variable "enable_ci_cd" {
   description = "A flag to enable/disable the CI/CD null resource"
   type        = bool
   default     = false
+}
+
+# Add these to your existing variables.tf file
+
+variable "existing_user_pool_id" {
+  description = "ID of the existing Cognito User Pool"
+  type        = string
+}
+
+variable "existing_user_pool_arn" {
+  description = "ARN of the existing Cognito User Pool"
+  type        = string
+}
+
+variable "existing_user_pool_client_id" {
+  description = "ID of the existing Cognito User Pool Client"
+  type        = string
+}
+
+variable "cognito_region" {
+  description = "AWS region where the Cognito User Pool is located"
+  type        = string
+}
+
+variable "cognito_account_id" {
+  description = "AWS account ID where the Cognito User Pool is located"
+  type        = string
+}
+
+variable "cognito_role_name" {
+  description = "IAM role name for accessing Cognito resources"
+  type        = string
+}
+
+variable "existing_user_pool_domain" {
+  description = "The domain name of the existing Cognito User Pool"
+  type        = string
+}
+
+variable "acm_certificate_arn" {
+  description = "ARN of the ACM certificate to use for the HTTPS listener"
+  type        = string
 }
